@@ -1,16 +1,71 @@
-# Policy Hacker — Task 1: Policy Monitoring Digest
+# Policy Hacker — AI Policy & Government-News Digest
 
-A prototype that replaces manual checking of Latvian government/policy sources with a
-weekly digest of only the items that are actually relevant to startups.
+Monitoring Latvian government and policy sources by hand is slow, and 95% of what you read
+is irrelevant to any given startup. **Policy Hacker** reads seven official sources end to
+end — full bill text, meeting protocols, agency news — and produces a short, Latvian-language
+digest of only the items that actually matter to startups: new funding to apply for, and
+regulatory changes to react to.
+
+What makes it more than a scraper-plus-keyword-filter:
+
+- A **two-tier model pipeline** — cheap classification at scale, expensive verification
+  only where it pays off.
+- A **deep-verification agent** that, for legislative items, goes and reads the *real*
+  primary law text with domain-restricted web tools before trusting a relevance claim.
+- **Two-stage deduplication** — string similarity *and* an LLM "same real-world event?"
+  judgment — so the same story on three sources shows up once.
+
+**▶ Live demo:** **<https://smalkaisk-hash.github.io/Policy-hacker-/>** — rebuilt
+automatically every week by GitHub Actions (no server).
+**📄 Example output:** a full digest from a real run on live data →
+**[`sample_digest/digest_example.md`](sample_digest/digest_example.md)** (renders inline
+right here on GitHub).
+
+---
+
+## How it works (the 20-second version)
+
+```
+fetch (7 sources, full text) → dedupe (string) → classify (Haiku) → dedupe (LLM)
+   → deep-verify legislative items (Sonnet + web tools) → render Latvian digest
+```
+
+Three parts are worth calling out:
+
+1. **Model tiering — Haiku for breadth, Sonnet for depth.** Every candidate item is
+   classified for relevance by **Claude Haiku** in fast, cheap batches. Only the small
+   subset that is *both* relevant *and* from a law/government-decision source escalates to
+   **Claude Sonnet 5** — the expensive stage is bounded to where it earns its cost.
+
+2. **A deep-verification agent with domain-restricted web tools.** A Saeima committee
+   agenda often reads as nothing but a routing list of bill titles — no description of what
+   any amendment actually *does*. So the verifier gives Sonnet live `web_search` / `web_fetch`
+   tools **locked to official Latvian government/legal domains** (`likumi.lv`, `saeima.lv`,
+   `tapportals.mk.gov.lv`, `data.gov.lv`, …), hands it the scraped bill/document number as a
+   search key, and has it find and read the *real* primary text before confirming or
+   rejecting the startup-relevance claim. It **fails closed**: an item it can't confirm
+   against real primary text is held back, not shown with a caveat. Confirmed items carry a
+   "Pārbaudīts pret oriģinālo tekstu" line linking the source it actually read.
+
+3. **Dual deduplication.** The same story is often syndicated across sources. Stage one
+   (`difflib` text similarity) catches verbatim and near-verbatim copies for free. Stage two
+   is an **LLM judgment call** — two independently *written* articles about the same event
+   can share almost no wording, so a string compare misses them; Claude decides "same
+   real-world event?" instead. (Dedup never compares two items from one source, and keys on
+   content rather than title alone — both learned the hard way; see `CLAUDE.md`.)
+
+Full step-by-step pipeline is in the [Pipeline](#pipeline-in-detail) section below.
+
+---
 
 ## Sources covered
 
-All 7 listed sources are implemented (past the task's minimum of 3, TAP portāls included).
-Every source pulls the full article/document body, not just the headline.
+All 7 sources are implemented, each pulling the **full article/document body**, not just the
+headline.
 
 | Source | How it's fetched |
 |---|---|
-| **TAP portāls** (mandatory) | [Open dataset on data.gov.lv](https://data.gov.lv/dati/lv/dataset/tap-publicetie-tiesibu-akti) for metadata, plus full act text via TAP's public "structuralizer" preview endpoint, or a direct `.docx` attachment parsed with `python-docx` when no preview exists. |
+| **TAP portāls** | [Open dataset on data.gov.lv](https://data.gov.lv/dati/lv/dataset/tap-publicetie-tiesibu-akti) for metadata, plus full act text via TAP's public "structuralizer" preview endpoint, or a direct `.docx` attachment parsed with `python-docx` when no preview exists. |
 | Valsts sekretāru sanāksme | `tapportals.mk.gov.lv/meetings/state_secretaries` — full agenda item text. |
 | Ministru kabineta protokoli | Same mechanism, `tapportals.mk.gov.lv/meetings/cabinet_ministers`. |
 | Ekonomikas ministrija | `em.gov.lv/lv/jaunumi` listing + each article's full body. |
@@ -34,12 +89,7 @@ excluded, along with events (contests, mentor calls, course cohorts) and generic
 Definition lives in [`policy_digest/classify.py`](policy_digest/classify.py)
 (`SYSTEM_PROMPT`, and `KEYWORDS` for the no-API-key fallback).
 
-## How it works
-
-```
-fetch (7 sources, full text) → dedupe against local state → classify for relevance
-  → deep-verify legislative items against primary source → render digest
-```
+## Pipeline in detail
 
 1. **Fetch** — one module per source under `policy_digest/sources/`, returning normalized
    items with the real article/document body attached, not just a title.
@@ -55,7 +105,7 @@ fetch (7 sources, full text) → dedupe against local state → classify for rel
    still marked relevant from the three government-decision/law sources (TAP portāls,
    Saeima committees, the two MK/VSS meeting feeds) and gives **Claude Sonnet 5** live
    `web_search`/`web_fetch` tools, restricted to official Latvian government/legal domains
-   (`likumi.lv`, `saeima.lv`, `tapportals.mk.gov.lv`, ...), to go find and actually read the
+   (`likumi.lv`, `saeima.lv`, `tapportals.mk.gov.lv`, …), to go find and actually read the
    bill's real text — using the bill/document number already scraped as the search key —
    and confirm or reject the relevance claim against that primary text, not just the
    (sometimes bare-titles-only) agenda snippet the scraper happened to fetch. A confirmed
@@ -99,8 +149,9 @@ sample run generated **with** an API key is checked into
 
 ## Hosting a live version (GitHub Pages)
 
-[`.github/workflows/digest.yml`](.github/workflows/digest.yml) runs the digest and publishes
-it to GitHub Pages — free, no server. One-time setup in the repo's GitHub web UI:
+The [live demo](https://smalkaisk-hash.github.io/Policy-hacker-/) is published by
+[`.github/workflows/digest.yml`](.github/workflows/digest.yml), which runs the digest and
+deploys it to GitHub Pages — free, no server. One-time setup in the repo's GitHub web UI:
 
 1. **Add the API key as a secret**: Settings → Secrets and variables → Actions → New
    repository secret → name `ANTHROPIC_API_KEY`.
