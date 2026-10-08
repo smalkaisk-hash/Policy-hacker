@@ -15,7 +15,7 @@ What makes it more than a scraper-plus-keyword-filter:
 - **Two-stage deduplication** — string similarity *and* an LLM "same real-world event?"
   judgment — so the same story on three sources shows up once.
 
-**▶ Live demo:** **<https://smalkaisk-hash.github.io/Policy-hacker-/>** — rebuilt
+**▶ Live demo:** **<https://smalkaisk-hash.github.io/Policy-hacker/>** — rebuilt
 automatically every week by GitHub Actions (no server).
 **📄 Example output:** a full digest from a real run on live data →
 **[`sample_digest/digest_example.md`](sample_digest/digest_example.md)** (renders inline
@@ -149,7 +149,7 @@ sample run generated **with** an API key is checked into
 
 ## Hosting a live version (GitHub Pages)
 
-The [live demo](https://smalkaisk-hash.github.io/Policy-hacker-/) is published by
+The [live demo](https://smalkaisk-hash.github.io/Policy-hacker/) is published by
 [`.github/workflows/digest.yml`](.github/workflows/digest.yml), which runs the digest and
 deploys it to GitHub Pages — free, no server. One-time setup in the repo's GitHub web UI:
 
